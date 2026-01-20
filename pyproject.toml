@@ -1,0 +1,8 @@
+[project]
+name = "academypointclouds"
+version = "0.1.0"
+requires-python = ">=3.12"
+dependencies = [
+    "numpy>=2.3.2",
+    "open3d>=0.19.0",
+]
