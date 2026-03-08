@@ -284,6 +284,7 @@ def run_sweep():
                 f"RMSE={metrics['rmse']:.6f}, "
                 f"Score={metrics['score']:.6f}, "
                 f"Fitness={metrics['fitness']:.4f}, "
+                f"Time={metrics['runtime_sec']:.4f}s, "
                 f"Corr={metrics['correspondences']}, "
                 f"Valid={not metrics['is_invalid_alignment']}"
             )
@@ -293,7 +294,13 @@ def run_sweep():
                 best_cfg = copy.deepcopy(cfg)
                 best_metrics = metrics
                 print("   --> new best config found")
+                # Checkpoint best-so-far so Ctrl+C does not lose progress.
+                save_config(best_cfg, BEST_CONFIG_PATH)
+                print(f"   --> checkpoint saved to {BEST_CONFIG_PATH}")
 
+        except KeyboardInterrupt:
+            print("\nInterrupted by user (Ctrl+C). Keeping best-so-far and stopping sweep.")
+            break
         except Exception as e:
             print(f"[{i:04d}] FAILED: {e}")
 
