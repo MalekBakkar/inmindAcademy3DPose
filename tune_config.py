@@ -17,7 +17,7 @@ BEST_CONFIG_PATH = "config/best_config.yaml"
 
 MAX_TRIALS = 1000
 EVAL_RUNS_PER_CONFIG = 2
-RNG_SEED = 42
+RNG_SEED = 41
 
 # Evaluation threshold used for all configurations (fair comparison).
 # If None, use base config's icp.distance_threshold as the fixed threshold.
