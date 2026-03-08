@@ -1,74 +1,127 @@
-# Point Cloud Registration Assignment
+# Point Cloud Registration Pipeline
 
-## Objective
+This project registers a source point cloud to a target point cloud using:
+- Global feature-based alignment (RANSAC + FPFH)
+- Local refinement (robust point-to-plane ICP)
+- A tuner that searches configuration parameters
 
-The goal of this assignment is to implement a point cloud registration algorithm. You will be provided with two point clouds: a source and a target. Your task is to find the rigid transformation (rotation and translation) that aligns the source point cloud to the target point cloud.
-
-## Instructions
-
-1. **Clone the repository:**
-
-   ```bash
-   git clone https://github.com/malek-wahidi/AcademyPointClouds.git
-   cd AcademyPointClouds
-   ```
-
-2. **Create your own GitHub repository and change the origin:**
-
-   Do **not fork** the repository and **do not submit a Pull Request**.
-
-   Instead, create a **new empty repository on your own GitHub account**, then update the `origin` of your cloned repository to point to it.
-
-   Example:
-
-   ```bash
-   git remote remove origin
-   git remote add origin https://github.com/<your-username>/<your-repository-name>.git
-   git push -u origin main
-   ```
-
-   From this point on, you will push your work to **your own repository**.
-
-3. **Set up the environment:**
-
-   This project uses `uv` for package management.
-
-   ```bash
-   uv sync
-   ```
-
-4. **Implement your registration function:**
-
-   Open the `registration.py` file. You will find a function called `register`. You need to implement your registration algorithm inside this function. The function takes two `open3d.geometry.PointCloud` objects as input and should return a **4×4 NumPy array representing the transformation matrix**.
-
-5. **Run the code:**
-
-   You can run the main script to test your implementation:
-
-   ```bash
-   uv run main.py
-   ```
-
-   This will load a sample point cloud, create a transformed version of it, and then call your `register` function to find the alignment. The script will also time how long your registration takes.
-
-6. **Submit your solution:**
-
-   Push your completed work to **your own GitHub repository**.
-
-   To submit the assignment, **send me the link to your repository**.
-
-   Your submission will be evaluated based on:
-
-   * **Correctness:** How well your algorithm aligns the point clouds.
-   * **Performance:** The execution time of your registration function.
-   * **Code Quality:** The clarity and efficiency of your implementation.
-
-## Troubleshooting
-
-If you encounter errors related to Open3D visualization (such as `GLFW Error: Wayland: The platform does not support setting the window position` or `Failed creating OpenGL window`) on Linux systems using Wayland, try running the script with X11 compatibility:
+## Setup
 
 ```bash
-XDG_SESSION_TYPE=x11 uv run main.py
+uv sync
 ```
 
-This can help resolve issues with OpenGL window creation in some desktop environments.
+## Config Files
+
+All YAML config files are under `config/`:
+- `config/config.yaml`: baseline configuration
+- `config/best_config.yaml`: best config found by tuning
+
+## Two Main Runs
+
+1. Tune parameters and save the best config:
+
+```bash
+uv run tune_config.py
+```
+
+2. Run registration using the tuned best config:
+
+```bash
+uv run main.py --config config/best_config.yaml
+```
+
+If you want a baseline comparison, run:
+
+```bash
+uv run main.py --config config/config.yaml
+```
+
+## `registration.py` Algorithm
+
+`register(pcd1, pcd2)` follows this sequence:
+
+1. Preprocessing
+- Voxel downsampling with `voxel_size`
+- Normal estimation with:
+  - `normals.radius_multiplier`
+  - `normals.max_nn`
+- FPFH feature extraction with:
+  - `features.radius_multiplier`
+  - `features.max_nn`
+
+2. Global registration (RANSAC)
+- Uses `registration_ransac_based_on_feature_matching`
+- Distance threshold: `voxel_size * ransac.distance_multiplier`
+- Key parameters:
+  - `ransac.ransac_n`
+  - `ransac.edge_length_threshold`
+  - `ransac.max_iterations`
+  - `ransac.confidence`
+- Produces a coarse initial transform (`trans_init`)
+
+3. Local refinement (robust ICP)
+- Re-estimates normals on full clouds
+- Runs point-to-plane ICP with:
+  - `icp.distance_threshold`
+  - `icp.max_iterations`
+- Uses Tukey robust loss (`robust_kernel.k`) to reduce outlier influence
+- Returns the final 4x4 transform
+
+## `tune_config.py` Search Strategy
+
+- Starts from `config/config.yaml`
+- Builds a discrete search space for all major parameters
+- Evaluates up to `MAX_TRIALS` random unique samples (seeded for reproducibility)
+- Includes the base config as one trial
+- Each configuration is evaluated multiple times (`EVAL_RUNS_PER_CONFIG`) to reduce randomness effects from RANSAC
+
+The tuner saves only:
+- `config/best_config.yaml`
+
+It no longer writes CSV files or plot PNGs.
+
+## Tuning Metrics and Score Formula
+
+Per configuration, the tuner computes:
+- `rmse`: inlier alignment error (lower is better)
+- `fitness`: overlap quality / correspondence ratio (higher is better)
+- `rmse_std`: stability across repeated runs (lower is better)
+- `runtime_sec`: average runtime (lower is better, secondary)
+
+Composite score (lower is better):
+
+```text
+score = rmse
+      + FITNESS_WEIGHT * (1 - fitness)
+      + RMSE_STD_WEIGHT * rmse_std
+      + TIME_WEIGHT * runtime_sec
+```
+
+Current weights in code:
+- `FITNESS_WEIGHT = 0.01`
+- `RMSE_STD_WEIGHT = 0.30`
+- `TIME_WEIGHT = 0.0002`
+
+Why this score:
+- `rmse` is the primary geometric accuracy objective
+- `(1 - fitness)` penalizes poor overlap
+- `rmse_std` penalizes unstable configs that only work occasionally
+- `runtime_sec` is included as a small tie-breaker, not a dominant term
+
+## Why Evaluation Threshold Is Fixed During Tuning
+
+During tuning, all configs are evaluated with the same distance threshold (from base config, unless overridden by `FIXED_EVAL_THRESHOLD`).
+
+Reason:
+- If each config uses its own ICP/evaluation threshold, comparisons become biased
+- Larger thresholds can inflate fitness/correspondence statistics
+- A fixed threshold makes metrics directly comparable across candidate configs
+
+## Troubleshooting (Linux Wayland)
+
+If Open3D window creation fails, try:
+
+```bash
+XDG_SESSION_TYPE=x11 uv run main.py --config config/best_config.yaml
+```
