@@ -79,7 +79,7 @@ uv run main.py --config config/config.yaml
 The tuner saves only:
 - `config/best_config.yaml`
 
-It no longer writes CSV files or plot PNGs.
+
 
 ## Tuning Metrics and Score Formula
 
