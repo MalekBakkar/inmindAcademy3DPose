@@ -19,7 +19,7 @@ features:
 
 ransac:
   distance_multiplier: 1.5
-  ransac_n: 3
+  ransac_n: 4
   edge_length_threshold: 0.9
   max_iterations: 100000
   confidence: 0.999
@@ -40,4 +40,4 @@ icp:
 
 robust_kernel:
   type: Tukey
-  k: 0.1
+  k: 0.02

@@ -1,19 +1,19 @@
 voxel_size: 0.05
 normals:
-  radius_multiplier: 2
-  max_nn: 30
+  radius_multiplier: 2.0
+  max_nn: 20
 features:
-  radius_multiplier: 5
+  radius_multiplier: 2.0
   max_nn: 100
 ransac:
-  distance_multiplier: 1.5
-  ransac_n: 3
-  edge_length_threshold: 0.9
-  max_iterations: 100000
-  confidence: 0.999
+  distance_multiplier: 3.0
+  ransac_n: 5
+  edge_length_threshold: 0.95
+  max_iterations: 20000
+  confidence: 0.995
 icp:
-  distance_threshold: 0.02
-  max_iterations: 2000
+  distance_threshold: 0.03
+  max_iterations: 1000
 robust_kernel:
   type: Tukey
-  k: 0.1
+  k: 0.05

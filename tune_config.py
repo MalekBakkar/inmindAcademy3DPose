@@ -15,8 +15,8 @@ import registration  # this imports your register() and config dict
 BASE_CONFIG_PATH = "config/config.yaml"
 BEST_CONFIG_PATH = "config/best_config.yaml"
 
-MAX_TRIALS = 8
-EVAL_RUNS_PER_CONFIG = 3
+MAX_TRIALS = 1000
+EVAL_RUNS_PER_CONFIG = 2
 RNG_SEED = 42
 
 # Evaluation threshold used for all configurations (fair comparison).
@@ -28,6 +28,12 @@ FIXED_EVAL_THRESHOLD = None
 FITNESS_WEIGHT = 0.01
 RMSE_STD_WEIGHT = 0.30
 TIME_WEIGHT = 0.0002
+
+# Degenerate registration guardrails.
+# These are not tuning objectives; they only reject clearly invalid alignments.
+MIN_VALID_FITNESS = 0.05
+MIN_VALID_CORRESPONDENCES = 50
+INVALID_ALIGNMENT_PENALTY = 1.0
 
 
 def to_builtin(obj):
@@ -221,6 +227,15 @@ def evaluate_config(cfg, eval_threshold, runs=EVAL_RUNS_PER_CONFIG):
     runtime_penalty = TIME_WEIGHT * runtime_mean
     score = rmse_mean + fitness_penalty + stability_penalty + runtime_penalty
 
+    # Open3D returns rmse=0 when no correspondences; treat as invalid registration.
+    is_invalid_alignment = (
+        corr_mean < MIN_VALID_CORRESPONDENCES
+        or fitness_mean <= MIN_VALID_FITNESS
+        or (rmse_mean == 0.0 and corr_mean == 0.0)
+    )
+    invalid_penalty = INVALID_ALIGNMENT_PENALTY if is_invalid_alignment else 0.0
+    score += invalid_penalty
+
     return {
         "rmse": rmse_mean,
         "fitness": fitness_mean,
@@ -232,6 +247,8 @@ def evaluate_config(cfg, eval_threshold, runs=EVAL_RUNS_PER_CONFIG):
         "fitness_penalty": float(fitness_penalty),
         "stability_penalty": float(stability_penalty),
         "runtime_penalty": float(runtime_penalty),
+        "invalid_penalty": float(invalid_penalty),
+        "is_invalid_alignment": bool(is_invalid_alignment),
         "score": float(score),
         "eval_threshold": float(eval_threshold_used),
     }
@@ -253,7 +270,7 @@ def run_sweep():
     print(
         "Objective: score = rmse + "
         f"{FITNESS_WEIGHT}*(1-fitness) + "
-        f"{RMSE_STD_WEIGHT}*rmse_std + {TIME_WEIGHT}*runtime_sec"
+        f"{RMSE_STD_WEIGHT}*rmse_std + {TIME_WEIGHT}*runtime_sec + invalid_penalty"
     )
     print(f"Evaluation threshold mode: fixed for all trials = {eval_threshold}")
     print(f"Runs per config: {EVAL_RUNS_PER_CONFIG}")
@@ -263,16 +280,12 @@ def run_sweep():
             metrics = evaluate_config(cfg, eval_threshold, runs=EVAL_RUNS_PER_CONFIG)
 
             print(
-                f"[{i:04d}] Score={metrics['score']:.6f}, "
+                f"[{i:04d}] "
                 f"RMSE={metrics['rmse']:.6f}, "
+                f"Score={metrics['score']:.6f}, "
                 f"Fitness={metrics['fitness']:.4f}, "
-                f"Time={metrics['runtime_sec']:.4f}s, "
                 f"Corr={metrics['correspondences']}, "
-                f"RMSEstd={metrics['rmse_std']:.6f}, "
-                f"FitPen={metrics['fitness_penalty']:.6f}, "
-                f"StdPen={metrics['stability_penalty']:.6f}, "
-                f"TimePen={metrics['runtime_penalty']:.6f}, "
-                f"EvalThr={metrics['eval_threshold']:.4f}"
+                f"Valid={not metrics['is_invalid_alignment']}"
             )
 
             if metrics["score"] < best_score:
