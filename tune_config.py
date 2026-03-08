@@ -15,7 +15,7 @@ import registration  # this imports your register() and config dict
 BASE_CONFIG_PATH = "config/config.yaml"
 BEST_CONFIG_PATH = "config/best_config.yaml"
 
-MAX_TRIALS = 1000
+MAX_TRIALS = 100
 EVAL_RUNS_PER_CONFIG = 2
 RNG_SEED = 41
 
@@ -102,7 +102,8 @@ def build_search_space(base_cfg):
         ("ransac", "confidence"): [0.99, 0.995, 0.999, 0.9999],
 
         # ICP refinement
-        ("icp", "distance_threshold"): [0.005, 0.01, 0.015, 0.02, 0.03, 0.05, 0.08],
+        # Keep distance_threshold fixed from base config for fair and consistent
+        # evaluation in tune_config and main.py.
         ("icp", "max_iterations"): [200, 500, 1000, 2000, 5000],
 
         # Robust kernel
